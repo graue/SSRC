@@ -1,0 +1,22 @@
+CFLAGS=-std=c99 -g -Wall -Wno-attributes -Wno-unused-function -Wno-unused-variable -I../common/ -DMAXBUTWIDTH=$(MAXBUTWIDTH)
+OPT=-O3
+
+all : $(OBJ)
+
+%_purecsp.o : %_purecsp.c
+	$(CC) $(CFLAGS) $(OPT) -DSLEEFDFT_REAL_IS_FLOAT -DPUREC_FLOAT -c $< -o $@
+
+%_sse3sp.o : %_sse3sp.c
+	$(CC) $(CFLAGS) $(OPT) -msse -msse2 -msse3 -DSLEEFDFT_REAL_IS_FLOAT -DSSE3_FLOAT -c $< -o $@
+
+%_avxsp.o : %_avxsp.c
+	$(CC) $(CFLAGS) $(OPT) -msse -msse2 -msse3 -mavx -DSLEEFDFT_REAL_IS_FLOAT -DAVX_FLOAT -c $< -o $@
+
+%_purecdp.o : %_purecdp.c
+	$(CC) $(CFLAGS) $(OPT) -DPUREC_DOUBLE -c $< -o $@
+
+%_sse3dp.o : %_sse3dp.c
+	$(CC) $(CFLAGS) $(OPT) -msse -msse2 -msse3 -DSSE3_DOUBLE -c $< -o $@
+
+%_avxdp.o : %_avxdp.c
+	$(CC) $(CFLAGS) $(OPT) -msse -msse2 -msse3 -mavx -DAVX_DOUBLE -c $< -o $@
