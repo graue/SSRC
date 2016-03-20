@@ -2,7 +2,7 @@ ifeq ($(CC),cc)
 CC=gcc
 endif
 
-CFLAGS = -Wall -Wno-unused -g -I./dft
+CFLAGS = -Wall -Wno-unused -g -O3 -I./dft
 #CFLAGS += -DBIGENDIAN
 
 all : ssrc
