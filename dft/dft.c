@@ -155,13 +155,13 @@ static int makeTableRecurse(SleefDFT_real *x, int *p, const int log2len, const i
 static SleefDFT_real **makeTable(int sign, int vecwidth, int log2len, const int N, const int K) {
   if (log2len < N) return NULL;
 
-  SleefDFT_real **tbl = calloc(sizeof(SleefDFT_real *), (log2len+1));
+  SleefDFT_real **tbl = (SleefDFT_real **)calloc(sizeof(SleefDFT_real *), (log2len+1));
 
   for(int level=N;level<=log2len;level++) {
     if (level == log2len && (1 << (log2len-N)) < vecwidth) { tbl[level] = NULL; continue; }
 
     int tblOffset = 0;
-    tbl[level] = SleefDFT_malloc(sizeof(SleefDFT_real) * (K << (level-N)));
+    tbl[level] = (SleefDFT_real *)SleefDFT_malloc(sizeof(SleefDFT_real) * (K << (level-N)));
 
     for(int i0=0;i0 < (1 << (log2len-N));i0+=(1 << (log2len - level))) {
       int p[(N+1)<<N];
@@ -179,7 +179,7 @@ static SleefDFT_real **makeTable(int sign, int vecwidth, int log2len, const int 
     }
 
     if (level == log2len) {
-      SleefDFT_real *atbl = SleefDFT_malloc(sizeof(SleefDFT_real)*(K << (log2len-N))*2);
+      SleefDFT_real *atbl = (SleefDFT_real *)SleefDFT_malloc(sizeof(SleefDFT_real)*(K << (log2len-N))*2);
       tblOffset = 0;
       while(tblOffset < (K << (log2len-N))) {
 	for(int k=0;k < K;k++) {
@@ -225,7 +225,7 @@ typedef struct SleefDFT {
 
 static void freeTables(SleefDFT *p) {
   for(int N=1;N<=MAXBUTWIDTH;N++) {
-    for(int level=N;level<=p->log2len;level++) {
+    for(uint32_t level=N;level<=p->log2len;level++) {
       SleefDFT_free(p->tbl[N][level]);
     }
     free(p->tbl[N]);
@@ -371,7 +371,7 @@ static uint64_t gettime() {
 static void searchForRandomPathRecurse(SleefDFT *p, int level, int *path, uint64_t tm) {
   if (level == 0) {
     p->bestTime = tm;
-    for(int j = 0;j < p->log2len+1;j++) p->bestPath[j] = path[j];
+    for(uint32_t j = 0;j < p->log2len+1;j++) p->bestPath[j] = path[j];
     return;
   }
 
@@ -393,7 +393,7 @@ static void searchForRandomPathRecurse(SleefDFT *p, int level, int *path, uint64
 static void searchForBestPathRecurse(SleefDFT *p, int level, int *path, uint64_t tm) {
   if (level == 0 && tm < p->bestTime) {
     p->bestTime = tm;
-    for(int j = 0;j < p->log2len+1;j++) p->bestPath[j] = path[j];
+    for(uint32_t j = 0;j < p->log2len+1;j++) p->bestPath[j] = path[j];
     return;
   }
 
@@ -416,10 +416,10 @@ static uint64_t estimate(int level, int N) {
 }
 
 static int measure(SleefDFT *p, int randomize) {
-  SleefDFT_real *s = memset(p->x0, 0, sizeof(SleefDFT_real) * (2 << p->log2len));
-  SleefDFT_real *d = memset(p->x1, 0, sizeof(SleefDFT_real) * (2 << p->log2len));
+  SleefDFT_real *s = (SleefDFT_real *)memset(p->x0, 0, sizeof(SleefDFT_real) * (2 << p->log2len));
+  SleefDFT_real *d = (SleefDFT_real *)memset(p->x1, 0, sizeof(SleefDFT_real) * (2 << p->log2len));
 
-  for(int level=1;level<=p->log2len;level++) {
+  for(uint32_t level=1;level<=p->log2len;level++) {
     for(int N=1;N<=MAXBUTWIDTH;N++) {
       p->tm[level*(MAXBUTWIDTH+1)+N] = 1ULL << 60;
       p->tm2[level*(MAXBUTWIDTH+1)+N] = 1ULL << 60;
@@ -433,11 +433,11 @@ static int measure(SleefDFT *p, int randomize) {
     while(gettime()-tm < 100000000LL) ;
   }
 
-  for(int level = p->log2len;level >= 1;level--) {
-    for(int N=1;N<=MAXBUTWIDTH;N++) {
+  for(uint32_t level = p->log2len;level >= 1;level--) {
+    for(uint32_t N=1;N<=MAXBUTWIDTH;N++) {
       if (level < N || p->log2len <= N) continue;
       if (level == N) {
-	if (p->log2len - level < p->log2vecwidth) continue;
+	if ((int)p->log2len - (int)level < p->log2vecwidth) continue;
 	if (!randomize && p->planMode != 0) {
 	  const int pl = level >= p->log2len-2 ? 1 : 1;
 
@@ -478,7 +478,7 @@ static int measure(SleefDFT *p, int randomize) {
       } else {
 	if (p->tbl[N] == NULL || p->tbl[N][level] == NULL) continue;
 	if (p->vecwidth > 2 && p->log2len <= N+2) continue;
-	if (p->log2len - level < p->log2vecwidth) continue;
+	if ((int)p->log2len - (int)level < p->log2vecwidth) continue;
 	if (!randomize && p->planMode != 0) {
 	  for(int i0=0, i1=0;i0 < (1 << (p->log2len-N));i0+=p->vecwidth, i1++) {
 	    p->perm[level][i1] = 2*perm(p->log2len, i0, p->log2len-level, p->log2len-(level-N));
@@ -514,7 +514,7 @@ static int measure(SleefDFT *p, int randomize) {
 
   if (!executable) return 0;
 
-  p->bestPath = malloc(sizeof(int) * (p->log2len+1));
+  p->bestPath = (int *)malloc(sizeof(int) * (p->log2len+1));
   p->bestTime = 1ULL << 60;
 
   int path[p->log2len+1];
@@ -568,21 +568,21 @@ SleefDFT *SleefDFT_init(uint64_t mode, uint32_t n) {
   int sign = (mode & SLEEF_MODE_BACKWARD) != 0 ? -1 : 1;
   p->log2len = ilog2(n);
 
-  p->perm = calloc(sizeof(uint32_t *), p->log2len+1);
+  p->perm = (uint32_t **)calloc(sizeof(uint32_t *), p->log2len+1);
   for(int level = p->log2len;level >= 1;level--) {
-    p->perm[level] = SleefDFT_malloc(sizeof(uint32_t) * ((1 << p->log2len) + 8));
+    p->perm[level] = (uint32_t *)SleefDFT_malloc(sizeof(uint32_t) * ((1 << p->log2len) + 8));
   }
 
-  p->x0 = SleefDFT_malloc(sizeof(SleefDFT_real) * n * 2);
-  p->x1 = SleefDFT_malloc(sizeof(SleefDFT_real) * n * 2);
+  p->x0 = (SleefDFT_real *)SleefDFT_malloc(sizeof(SleefDFT_real) * n * 2);
+  p->x1 = (SleefDFT_real *)SleefDFT_malloc(sizeof(SleefDFT_real) * n * 2);
 
   if ((mode & SLEEF_MODE_REAL) != 0) {
-    p->rtCoef0 = SleefDFT_malloc(sizeof(SleefDFT_real) * n);
-    p->rtCoef1 = SleefDFT_malloc(sizeof(SleefDFT_real) * n);
+    p->rtCoef0 = (SleefDFT_real *)SleefDFT_malloc(sizeof(SleefDFT_real) * n);
+    p->rtCoef1 = (SleefDFT_real *)SleefDFT_malloc(sizeof(SleefDFT_real) * n);
 
     int ts = (mode & SLEEF_MODE_BACKWARD) != 0;
 
-    for(int i=0;i<n/2;i++) {
+    for(uint32_t i=0;i<n/2;i++) {
       p->rtCoef0[i*2+0] = p->rtCoef0[i*2+1] = rtTable(ts, i*2+0, n);
       p->rtCoef1[i*2+0] = p->rtCoef1[i*2+1] = rtTable(ts, i*2+1, n);
     }
@@ -634,7 +634,7 @@ void SleefDFT_setPath(struct SleefDFT *p, char *pathStr) {
 		       &path[16], &path[17], &path[18], &path[19], &path[20], &path[21], &path[22], &path[23], 
 		       &path[24], &path[25], &path[26], &path[27], &path[28], &path[29], &path[30], &path[13]);
 
-  for(int j = 0;j <= p->log2len;j++) p->bestPath[j] = 0;
+  for(uint32_t j = 0;j <= p->log2len;j++) p->bestPath[j] = 0;
 
   for(int level = p->log2len, j=0;level > 0 && j < pathLen;) {
     p->bestPath[level] = level < abs(path[j]) ? level : path[j];

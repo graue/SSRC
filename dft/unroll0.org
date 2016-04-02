@@ -5386,7 +5386,7 @@ int getInt_%ISA%(int name) {
   return -1;
 }
 
-void *getPtr_%ISA%(int name) {
+const void *getPtr_%ISA%(int name) {
   switch(name) {
   case 0: return ISANAME;
   }

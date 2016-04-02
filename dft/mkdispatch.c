@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
     printf("void realSub0_%s(SleefDFT_real *, const SleefDFT_real *, const int, const SleefDFT_real *, const SleefDFT_real *);\n", argv[k]);
     printf("void realSub1_%s(SleefDFT_real *, const SleefDFT_real *, const int, const SleefDFT_real *, const SleefDFT_real *);\n", argv[k]);
     printf("int getInt_%s(int);\n", argv[k]);
-    printf("void *getPtr_%s(int);\n", argv[k]);
+    printf("const void *getPtr_%s(int);\n", argv[k]);
   }
 
   printf("\n");
@@ -190,7 +190,7 @@ int main(int argc, char **argv) {
   for(int k=0;k<16-(argc-isastart);k++) printf("NULL, ");
   printf("\n};\n\n");
 
-  printf("void *(*getPtr[16])(int) = {\n  ");
+  printf("const void *(*getPtr[16])(int) = {\n  ");
   for(int k=isastart;k<argc;k++) printf("getPtr_%s, ", argv[k]);
   for(int k=0;k<16-(argc-isastart);k++) printf("NULL, ");
   printf("\n};\n\n");

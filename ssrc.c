@@ -6,25 +6,25 @@
 #include <assert.h>
 #include <time.h>
 
+#include "dither.h"
+
 #include "sleefdft.h"
 
-#define NDEBUG
-
-#define VERSION "1.31"
+#define VERSION "1.32"
 
 #ifndef HIGHPREC
 typedef float REAL;
-double AA=120;
-double DF=100;
-int FFTFIRLEN=16384;
+double AA=140;
+double DF=2000;
 #define M 30
 #else
 typedef double REAL;
-double AA=170;
-double DF=100;
-int FFTFIRLEN=65536;
+double AA=150;
+double DF=200;
 #define M 30
 #endif
+
+#define MAXNCH 10
 
 #ifndef M_PI
 #define M_PI 3.1415926535897932384626433832795028842
@@ -38,232 +38,16 @@ double fact[M+1];
 
 static inline void ignoreReturnValue(int x) {}
 
-const int scoeffreq[] = {0,48000,44100,37800,32000,22050,48000,44100};
-
-const int scoeflen[] =  {1,16,20,16,16,15,16,15};
-const int samp[] =  {8,18,27,8,8,8,10,9};
-
-const double shapercoefs[8][21] = {
-  {-1}, /* triangular dither */
-
-  {-2.8720729351043701172,   5.0413231849670410156,  -6.2442994117736816406,   5.8483986854553222656,
-   -3.7067542076110839844,   1.0495119094848632812,   1.1830236911773681641,  -2.1126792430877685547,
-    1.9094531536102294922,  -0.99913084506988525391,  0.17090806365013122559,  0.32615602016448974609,
-   -0.39127644896507263184,  0.26876461505889892578, -0.097676105797290802002, 0.023473845794796943665,
-  }, /* 48k, N=16, amp=18 */
-
-  {-2.6773197650909423828,   4.8308925628662109375,  -6.570110321044921875,    7.4572014808654785156,
-   -6.7263274192810058594,   4.8481650352478027344,  -2.0412089824676513672,  -0.7006359100341796875,
-    2.9537565708160400391,  -4.0800385475158691406,   4.1845216751098632812,  -3.3311812877655029297,
-    2.1179926395416259766,  -0.879302978515625,       0.031759146600961685181, 0.42382788658142089844,
-   -0.47882103919982910156,  0.35490813851356506348, -0.17496839165687561035,  0.060908168554306030273,
-  }, /* 44.1k, N=20, amp=27 */
-
-  {-1.6335992813110351562,   2.2615492343902587891,  -2.4077029228210449219,   2.6341717243194580078,
-   -2.1440362930297851562,   1.8153258562088012695,  -1.0816224813461303711,   0.70302653312683105469,
-   -0.15991993248462677002, -0.041549518704414367676, 0.29416576027870178223, -0.2518316805362701416,
-    0.27766478061676025391, -0.15785403549671173096,  0.10165894031524658203, -0.016833892092108726501,
-  }, /* 37.8k, N=16 */
-
-  {-0.82901298999786376953,  0.98922657966613769531, -0.59825712442398071289,  1.0028809309005737305,
-   -0.59938216209411621094,  0.79502451419830322266, -0.42723315954208374023,  0.54492527246475219727,
-   -0.30792605876922607422,  0.36871799826622009277, -0.18792048096656799316,  0.2261127084493637085,
-   -0.10573341697454452515,  0.11435490846633911133, -0.038800679147243499756, 0.040842197835445404053,
-  }, /* 32k, N=16 */
-
-  {-0.065229974687099456787, 0.54981261491775512695,  0.40278548002243041992,  0.31783768534660339355,
-    0.28201797604560852051,  0.16985194385051727295,  0.15433363616466522217,  0.12507140636444091797,
-    0.08903945237398147583,  0.064410120248794555664, 0.047146003693342208862, 0.032805237919092178345,
-    0.028495194390416145325, 0.011695005930960178375, 0.011831838637590408325,
-  }, /* 22.05k, N=15 */
-
-  {-2.3925774097442626953,   3.4350297451019287109,  -3.1853709220886230469,   1.8117271661758422852,
-    0.20124770700931549072, -1.4759907722473144531,   1.7210904359817504883,  -0.97746700048446655273,
-    0.13790138065814971924,  0.38185903429985046387, -0.27421241998672485352, -0.066584214568138122559,
-    0.35223302245140075684, -0.37672343850135803223,  0.23964276909828186035, -0.068674825131893157959,
-  }, /* 48k, N=16, amp=10 */
-
-  {-2.0833916664123535156,   3.0418450832366943359,  -3.2047898769378662109,   2.7571926116943359375,
-   -1.4978630542755126953,   0.3427594602108001709,   0.71733748912811279297, -1.0737057924270629883,
-    1.0225815773010253906,  -0.56649994850158691406,  0.20968692004680633545,  0.065378531813621520996,
-   -0.10322438180446624756,  0.067442022264003753662, 0.00495197344571352005,
-  }, /* 44.1k, N=15, amp=9 */
-
-#if 0
-  { -3.0259189605712890625,  6.0268716812133789062,  -9.195003509521484375,   11.824929237365722656,
-   -12.767142295837402344,  11.917946815490722656,   -9.1739168167114257812,   5.3712320327758789062,
-    -1.1393624544143676758, -2.4484779834747314453,   4.9719839096069335938,  -6.0392003059387207031,
-     5.9359521865844726562, -4.903278350830078125,    3.5527443885803222656,  -2.1909697055816650391,
-     1.1672389507293701172, -0.4903914332389831543,   0.16519790887832641602, -0.023217858746647834778,
-  }, /* 44.1k, N=20 */
-#endif
-};
-
-double **shapebuf;
-int shaper_type,shaper_len,shaper_clipmin,shaper_clipmax;
-REAL *randbuf;
-int randptr;
 int quiet = 0;
 int lastshowed2;
-time_t starttime,lastshowed;
+time_t starttime, lastshowed;
 
-#define POOLSIZE 97
+struct SSRCDither *shaper[MAXNCH];
 
-int init_shaper(int freq,int nch,int min,int max,int dtype,int pdf,double noiseamp)
-{
-  int i;
-  int pool[POOLSIZE];
-
-  for(i=1;i<6;i++) if (freq == scoeffreq[i]) break;
-  if ((dtype == 3 || dtype == 4) && i == 6) {
-    fprintf(stderr,"Warning: ATH-based noise shaping for destination frequency %dHz is not available, using triangular dither\n",freq);
-  }
-  if (dtype == 2 || i == 6) i = 0;
-  if (dtype == 4 && (i == 1 || i == 2)) i += 5;
-
-  shaper_type = i;
-
-  shapebuf = malloc(sizeof(double *)*nch);
-  shaper_len = scoeflen[shaper_type];
-
-  for(i=0;i<nch;i++)
-    shapebuf[i] = calloc(shaper_len,sizeof(double));
-
-  shaper_clipmin = min;
-  shaper_clipmax = max;
-
-  randbuf = calloc(RANDBUFLEN,sizeof(REAL));
-
-  for(i=0;i<POOLSIZE;i++) pool[i] = rand();
-
-  switch(pdf)
-    {
-    case 0: // rectangular
-      for(i=0;i<RANDBUFLEN;i++)
-	{
-	  int r,p;
-
-	  p = rand() % POOLSIZE;
-	  r = pool[p]; pool[p] = rand();
-	  randbuf[i] = noiseamp * (((double)r)/RAND_MAX-0.5);
-	}
-      break;
-
-    case 1: // triangular
-      for(i=0;i<RANDBUFLEN;i++)
-	{
-	  int r1,r2,p;
-
-	  p = rand() % POOLSIZE;
-	  r1 = pool[p]; pool[p] = rand();
-	  p = rand() % POOLSIZE;
-	  r2 = pool[p]; pool[p] = rand();
-	  randbuf[i] = noiseamp * ((((double)r1)/RAND_MAX)-(((double)r2)/RAND_MAX));
-	}
-      break;
-
-    case 2: // gaussian
-      {
-	int sw = 0;
-	double t = 0, u = 0;
-
-	for(i=0;i<RANDBUFLEN;i++)
-	  {
-	    double r;
-	    int p;
-
-	    if (sw == 0) {
-	      sw = 1;
-
-	      p = rand() % POOLSIZE;
-	      r = ((double)pool[p])/RAND_MAX; pool[p] = rand();
-	      if (r == 1.0) r = 0.0;
-
-	      t = sqrt(-2 * log(1-r));
-
-	      p = rand() % POOLSIZE;
-	      r = ((double)pool[p])/RAND_MAX; pool[p] = rand();
-	  
-	      u = 2 * M_PI * r;
-	    
-	      randbuf[i] = noiseamp * t * cos(u);
-	    } else {
-	      sw = 0;
-
-	      randbuf[i] = noiseamp * t * sin(u);
-	    }
-	  }
-      }
-      break;
-    }
-
-  randptr = 0;
-
-  if (dtype == 0 || dtype == 1) return 1;
-  return samp[shaper_type];
-}
-
-int do_shaping(double s,double *peak,int dtype,int ch)
-{
-  double u,h;
-  int i;
-
-  if (dtype == 1) {
-    s += randbuf[randptr++ & (RANDBUFLEN-1)];
-
-    if (s < shaper_clipmin) {
-      double d = (double)s/shaper_clipmin;
-      *peak = *peak < d ? d : *peak;
-      s = shaper_clipmin;
-    }
-    if (s > shaper_clipmax) {
-      double d = (double)s/shaper_clipmax;
-      *peak = *peak < d ? d : *peak;
-      s = shaper_clipmax;
-    }
-
-    return RINT(s);
-  }
-
-  h = 0;
-  for(i=0;i<shaper_len;i++) h += shapercoefs[shaper_type][i]*shapebuf[ch][i];
-  s += h;
-  u = s;
-  s += randbuf[randptr++ & (RANDBUFLEN-1)];
-
-  for(i=shaper_len-2;i>=0;i--) shapebuf[ch][i+1] = shapebuf[ch][i];
-
-  if (s < shaper_clipmin) {
-    double d = (double)s/shaper_clipmin;
-    *peak = *peak < d ? d : *peak;
-    s = shaper_clipmin;
-    shapebuf[ch][0] = s-u;
-
-    if (shapebuf[ch][0] >  1) shapebuf[ch][0] =  1;
-    if (shapebuf[ch][0] < -1) shapebuf[ch][0] = -1;
-  } else if (s > shaper_clipmax) {
-    double d = (double)s/shaper_clipmax;
-    *peak = *peak < d ? d : *peak;
-    s = shaper_clipmax;
-    shapebuf[ch][0] = s-u;
-
-    if (shapebuf[ch][0] >  1) shapebuf[ch][0] =  1;
-    if (shapebuf[ch][0] < -1) shapebuf[ch][0] = -1;
-  } else {
-    s = RINT(s);
-    shapebuf[ch][0] = s-u;
-  }
-
-  return (int)s;
-}
-
-void quit_shaper(int nch)
-{
-  int i;
-
-  for(i=0;i<nch;i++) free(shapebuf[i]);
-  free(shapebuf);
-  free(randbuf);
+int do_shaping(double s, double *peak, int dtype, int ch) {
+  int ret;
+  SSRCDither_quantizeDouble(shaper[ch], &ret, &s, 1, 1.0);
+  return ret;
 }
 
 double alpha(double a)
@@ -313,21 +97,21 @@ void usage(void)
   printf("          --twopass                  two pass processing to avoid clipping\n");
   printf("          --normalize                normalize the wave file\n");
   printf("          --quiet                    nothing displayed except error\n");
-  printf("          --dither [<type>]          dithering\n");
-  printf("                                       0 : no dither\n");
-  printf("                                       1 : no noise shaping\n");
-  printf("                                       2 : triangular spectral shape\n");
-  printf("                                       3 : ATH based noise shaping\n");
-  printf("                                       4 : less dither amplitude than type 3\n");
+  printf("          --dither [<type>]          dither options\n");
+  printf("                                       0    : ATH-based noise shaping, low intensity\n");
+  printf("                                       2    : ATH-based noise shaping, mid intensity\n");
+  printf("                                       6    : ATH-based noise shaping, high intensity\n");
+  printf("                                       99   : No noise shaping\n");
+  printf("                                       help : Show all available noise shapers\n");
   printf("          --pdf <type> [<amp>]       select p.d.f. of noise\n");
-  printf("                                       0 : rectangular\n");
-  printf("                                       1 : triangular\n");
-  printf("                                       2 : Gaussian\n");
-#ifndef HIGHPREC
+  printf("                                       0 : Rectangular\n");
+  printf("                                       1 : Triangular\n");
+  //printf("                                       2 : Gaussian\n");
+  printf("                                       3 : Two-level (experimental)\n");
   printf("          --profile <type>           specify profile\n");
-  printf("                                       standard : the default quality\n");
-  printf("                                       fast     : fast, not so bad quality\n");
-#endif
+  printf("                                       short  : shorter filter length\n");
+  printf("                                       normal : the default quality\n");
+  printf("                                       long   : longer filter length\n");
 }
 
 void fmterr(int x)
@@ -366,9 +150,9 @@ void showprogress(double p)
   fflush(stdout);
 }
 
-int gcd(int x, int y)
+int64_t gcd(int64_t x, int64_t y)
 {
-    int t;
+    int64_t t;
 
     while (y != 0) {
         t = x % y;  x = y;  y = t;
@@ -376,11 +160,13 @@ int gcd(int x, int y)
     return x;
 }
 
-double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq,double gain,unsigned int chanklen,int twopass,int dither)
+double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int64_t dfrq,double gain,unsigned int chunklen,int twopass,int dither)
 {
-  int frqgcd,osf,fs1,fs2;
+  int64_t frqgcd,osf;
+  int64_t fs1, fs2, n2;
+  int64_t n1,n1x,n1y,n2b;
+
   REAL **stage1,*stage2;
-  int n1,n1x,n1y,n2,n2b;
   int filter2len;
   int *f1order,*f1inc;
   struct SleefDFT *dftf = NULL, *dftb = NULL;
@@ -391,7 +177,7 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq,d
   int spcount = 0;
   int i,j;
 
-  filter2len = FFTFIRLEN; /* stage 2 filter length */
+  filter2len = 1; /* stage 2 filter length */
 
   /* Make stage 1 filter */
 
@@ -402,14 +188,14 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq,d
 
     frqgcd = gcd(sfrq,dfrq);
 
-    fs1 = sfrq / frqgcd * dfrq;
+    fs1 = (int64_t)sfrq / frqgcd * dfrq;
 
     if (fs1/dfrq == 1) osf = 1;
     else if (fs1/dfrq % 2 == 0) osf = 2;
     else if (fs1/dfrq % 3 == 0) osf = 3;
     else {
-      fprintf(stderr,"Resampling from %dHz to %dHz is not supported.\n",sfrq,dfrq);
-      fprintf(stderr,"%d/gcd(%d,%d)=%d must be divided by 2 or 3.\n",sfrq,sfrq,dfrq,fs1/dfrq);
+      fprintf(stderr,"Resampling from %dHz to %dHz is not supported.\n",(int)sfrq, (int)dfrq);
+      fprintf(stderr,"%d/gcd(%d,%d)=%d must be divided by 2 or 3.\n",(int)sfrq,(int)sfrq,(int)dfrq,(int)(fs1/dfrq));
       exit(-1);
     }
 
@@ -437,7 +223,6 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq,d
     f1inc = calloc(n1y*osf,sizeof(int));
     for(i=0;i<n1y*osf;i++) {
       f1inc[i] = f1order[i] < fs1/(dfrq*osf) ? nch : 0;
-      if (f1order[i] == fs1/sfrq) f1order[i] = 0;
     }
 
     stage1 = malloc(n1y*sizeof(REAL *));
@@ -464,7 +249,7 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq,d
     delta = pow(10,-aa/20);
     if (aa <= 21) d = 0.9222; else d = (aa-7.95)/14.36;
 
-    fs2 = dfrq*osf;
+    fs2 = (int64_t)dfrq*osf;
 
     for(i=1;;i = i * 2)
       {
@@ -525,10 +310,10 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq,d
     buf2 = malloc(sizeof(REAL *)*nch);
     for(i=0;i<nch;i++) buf2[i] = SleefDFT_malloc(n2b * sizeof(REAL));
 
-    rawinbuf  = calloc(nch*(n2b2+n1x),bps);
-    rawoutbuf = calloc(nch*(n2b2/osf+1),dbps);
+    rawinbuf  = calloc(nch*(n2b2+n1x+2), bps);
+    rawoutbuf = calloc(nch*(n2b2/osf+1), dbps);
 
-    inbuf  = calloc(nch*(n2b2+n1x),sizeof(REAL));
+    inbuf  = calloc(nch*(n2b2+n1x+2),sizeof(REAL));
     outbuf = calloc(nch*(n2b2/osf+1),sizeof(REAL));
 
     s1p = 0;
@@ -547,9 +332,9 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq,d
       {
 	int nsmplread,toberead,toberead2;
 
-	toberead2 = toberead = floor((double)n2b2*sfrq/(dfrq*osf))+1+n1x-inbuflen;
-	if (toberead+sumread > chanklen) {
-	  toberead = chanklen-sumread;
+	toberead2 = toberead = ceil((double)n2b2*sfrq/(dfrq*osf))+1+n1x-inbuflen;
+	if (toberead+sumread > chunklen) {
+	  toberead = chunklen-sumread;
 	}
 
 	nsmplread = fread(rawinbuf,1,bps*nch*toberead,fpi);
@@ -596,13 +381,14 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq,d
 	    break;
 	  }
 
+	assert(i <= nch*(n2b2+n1x+2));
 	for(;i<nch*toberead2;i++) inbuf[nch*inbuflen+i] = 0;
 
 	inbuflen += toberead2;
 
 	sumread += nsmplread;
 
-	ending = feof(fpi) || sumread >= chanklen;
+	ending = feof(fpi) || sumread >= chunklen;
 
 	nsmplwrt1 = n2b2;
 
@@ -749,7 +535,7 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq,d
 		  {
 		    int s;
 
-		    if (dither) {
+		    if (dither != -1) {
 		      s = do_shaping(outbuf[i]*gain2,&peak,dither,ch);
 		    } else {
 		      s = RINT(outbuf[i]*gain2);
@@ -783,7 +569,7 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq,d
 		  {
 		    int s;
 
-		    if (dither) {
+		    if (dither != -1) {
 		      s = do_shaping(outbuf[i]*gain2,&peak,dither,ch);
 		    } else {
 		      s = RINT(outbuf[i]*gain2);
@@ -821,7 +607,7 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq,d
 		  {
 		    int s;
 
-		    if (dither) {
+		    if (dither != -1) {
 		      s = do_shaping(outbuf[i]*gain2,&peak,dither,ch);
 		    } else {
 		      s = RINT(outbuf[i]*gain2);
@@ -848,44 +634,6 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq,d
 	      }
 	    break;
 
-#if 0
-	    case 4:
-	      {
-		REAL gain2 = gain * (REAL)0x7fffffff;
-		ch = 0;
-
-		for(i=0;i<nsmplwrt2*nch;i++)
-		  {
-		    int s;
-
-		    if (dither) {
-		      s = do_shaping(outbuf[i]*gain2,&peak,dither,ch);
-		    } else {
-		      s = RINT(outbuf[i]*gain2);
-
-		      if (s < -0x80000000) {
-			double d = (double)s/-0x80000000;
-			peak = peak < d ? d : peak;
-			s = -0x80000000;
-		      }
-		      if (0x7fffffff <  s) {
-			double d = (double)s/ 0x7fffffff;
-			peak = peak < d ? d : peak;
-			s =  0x7fffffff;
-		      }
-		    }
-
-		    ((char *)rawoutbuf)[i*4  ] = s & 255; s >>= 8;
-		    ((char *)rawoutbuf)[i*4+1] = s & 255; s >>= 8;
-		    ((char *)rawoutbuf)[i*4+2] = s & 255; s >>= 8;
-		    ((char *)rawoutbuf)[i*4+3] = s & 255;
-
-		    ch++;
-		    if (ch == nch) ch = 0;
-		  }
-	      }
-	    break;
-#endif
 	    }
 	}
 
@@ -953,7 +701,7 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq,d
 	  rp -= ds*(fs1/sfrq);
 	}
 
-	if ((spcount++ & 7) == 7) showprogress((double)sumread / chanklen);
+	if ((spcount++ & 7) == 7) showprogress((double)sumread / chunklen);
       }
   }
 
@@ -975,14 +723,30 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq,d
   free(rawinbuf);
   free(rawoutbuf);
 
+  if (dither != -1) {
+    static int64_t dlmin[] = { 0, -0x80, -0x8000, -0x800000, -0x80000000ULL };
+    static int64_t dlmax[] = { 0,  0x7f,  0x7fff,  0x7fffff,  0x7fffffffULL };
+    double min = 0, max = 0;
+    for(i=0;i<nch;i++) {
+      double p[2];
+      SSRCDither_getPeaks(shaper[i], p);
+      if (p[1] < min) min = p[1];
+      if (p[0] > max) max = p[0];
+    }
+    if (min < dlmin[dbps]) peak = min / dlmin[dbps];
+    if (max > dlmax[dbps]) peak = max / dlmax[dbps];
+  }
+
   return peak;
 }
 
-double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq,double gain,unsigned int chanklen,int twopass,int dither)
+double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int64_t dfrq,double gain,unsigned int chunklen,int twopass,int dither)
 {
-  int frqgcd,osf,fs1,fs2;
+  int64_t frqgcd,osf;
+  int64_t fs1, fs2;
+  int64_t n2,n2x,n2y,n1,n1b;
+
   REAL *stage1,**stage2;
-  int n2,n2x,n2y,n1,n1b;
   int filter1len;
   int *f2order,*f2inc;
   struct SleefDFT *dftf = NULL, *dftb = NULL;
@@ -993,7 +757,7 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq
   int spcount = 0;
   double peak=0;
 
-  filter1len = FFTFIRLEN; /* stage 1 filter length */
+  filter1len = 1; /* stage 1 filter length */
 
   /* Make stage 1 filter */
 
@@ -1008,12 +772,12 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq
     else if (dfrq/frqgcd % 2 == 0) osf = 2;
     else if (dfrq/frqgcd % 3 == 0) osf = 3;
     else {
-      fprintf(stderr,"Resampling from %dHz to %dHz is not supported.\n",sfrq,dfrq);
-      fprintf(stderr,"%d/gcd(%d,%d)=%d must be divided by 2 or 3.\n",dfrq,sfrq,dfrq,dfrq/frqgcd);
+      fprintf(stderr,"Resampling from %dHz to %dHz is not supported.\n",(int)sfrq,(int)dfrq);
+      fprintf(stderr,"%d/gcd(%d,%d)=%d must be divided by 2 or 3.\n",(int)dfrq,(int)sfrq,(int)dfrq,(int)(dfrq/frqgcd));
       exit(-1);
     }
 
-    fs1 = sfrq*osf;
+    fs1 = (int64_t)sfrq*osf;
 
     delta = pow(10,-aa/20);
     if (aa <= 21) d = 0.9222; else d = (aa-7.95)/14.36;
@@ -1051,7 +815,7 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq
   /* Make stage 2 filter */
 
   if (osf == 1) {
-    fs2 = sfrq/frqgcd*dfrq;
+    fs2 = (int64_t)sfrq/frqgcd*dfrq;
     n2 = 1;
     n2y = n2x = 1;
     f2order = calloc(n2y,sizeof(int));
@@ -1066,7 +830,7 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq
     double lpf,delta,d,df,alp,iza;
     double guard = 2;
 
-    fs2 = sfrq / frqgcd * dfrq ;
+    fs2 = (int64_t)sfrq / frqgcd * dfrq;
 
     df = (fs1/2 - sfrq/2) * 2 / guard;
     lpf = sfrq/2 + (fs1/2 - sfrq/2)/guard;
@@ -1074,7 +838,7 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq
     delta = pow(10,-aa/20);
     if (aa <= 21) d = 0.9222; else d = (aa-7.95)/14.36;
 
-    n2 = fs2/df*d+1;
+    n2 = (int64_t)fs2/df*d+1;
     if (n2 % 2 == 0) n2++;
 
     alp = alpha(aa);
@@ -1181,8 +945,8 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq
 	int toberead;
 
 	toberead = (n1b2-rps-1)/osf+1;
-	if (toberead+sumread > chanklen) {
-	  toberead = chanklen-sumread;
+	if (toberead+sumread > chunklen) {
+	  toberead = chunklen-sumread;
 	}
 
 	nsmplread = fread(rawinbuf,1,bps*nch*toberead,fpi);
@@ -1228,12 +992,13 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq
 	    }
 	    break;
 	  }
+	assert(i <= nch*(n1b2/osf+osf+1));
 
 	for(;i<nch*toberead;i++) inbuf[i] = 0;
 
 	sumread += nsmplread;
 
-	ending = feof(fpi) || sumread >= chanklen;
+	ending = feof(fpi) || sumread >= chunklen;
 
 	rps_backup = rps;
 	s2p_backup = s2p;
@@ -1337,7 +1102,7 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq
 		  {
 		    int s;
 
-		    if (dither) {
+		    if (dither != -1) {
 		      s = do_shaping(outbuf[i]*gain2,&peak,dither,ch);
 		    } else {
 		      s = RINT(outbuf[i]*gain2);
@@ -1371,7 +1136,7 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq
 		  {
 		    int s;
 
-		    if (dither) {
+		    if (dither != -1) {
 		      s = do_shaping(outbuf[i]*gain2,&peak,dither,ch);
 		    } else {
 		      s = RINT(outbuf[i]*gain2);
@@ -1410,7 +1175,7 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq
 		  {
 		    int s;
 
-		    if (dither) {
+		    if (dither != -1) {
 		      s = do_shaping(outbuf[i]*gain2,&peak,dither,ch);
 		    } else {
 		      s = RINT(outbuf[i]*gain2);
@@ -1436,45 +1201,6 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq
 		  }
 	      }
 	    break;
-
-#if 0
-	    case 4:
-	      {
-		REAL gain2 = gain * (REAL)0x7fffffff;
-		ch = 0;
-
-		for(i=0;i<nsmplwrt2*nch;i++)
-		  {
-		    double s;
-
-		    if (dither) {
-		      s = do_shaping(outbuf[i]*gain2,&peak,dither,ch);
-		    } else {
-		      s = RINT(outbuf[i]*gain2);
-
-		      if (s < -0x80000000) {
-			double d = (double)s/-0x80000000;
-			peak = peak < d ? d : peak;
-			s = -0x80000000;
-		      }
-		      if (0x7fffffff <  s) {
-			double d = (double)s/ 0x7fffffff;
-			peak = peak < d ? d : peak;
-			s =  0x7fffffff;
-		      }
-		    }
-
-		    ((char *)rawoutbuf)[i*4  ] = s & 255; s >>= 8;
-		    ((char *)rawoutbuf)[i*4+1] = s & 255; s >>= 8;
-		    ((char *)rawoutbuf)[i*4+2] = s & 255; s >>= 8;
-		    ((char *)rawoutbuf)[i*4+3] = s & 255;
-
-		    ch++;
-		    if (ch == nch) ch = 0;
-		  }
-	      }
-	    break;
-#endif
 	    }
 	}
 
@@ -1527,7 +1253,7 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq
 	for(ch=0;ch<nch;ch++)
 	  memcpy(buf2[ch]+n2x+1,buf1[ch]+n1b2,sizeof(REAL)*n1b2);
 
-	if ((spcount++ & 7) == 7) showprogress((double)sumread / chanklen);
+	if ((spcount++ & 7) == 7) showprogress((double)sumread / chunklen);
       }
   }
 
@@ -1549,17 +1275,31 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int sfrq,int dfrq
   free(rawinbuf);
   free(rawoutbuf);
 
+  if (dither != -1) {
+    static int64_t dlmin[] = { 0, -0x80, -0x8000, -0x800000, -0x80000000ULL };
+    static int64_t dlmax[] = { 0,  0x7f,  0x7fff,  0x7fffff,  0x7fffffffULL };
+    double min = 0, max = 0;
+    for(i=0;i<nch;i++) {
+      double p[2];
+      SSRCDither_getPeaks(shaper[i], p);
+      if (p[1] < min) min = p[1];
+      if (p[0] > max) max = p[0];
+    }
+    if (min < dlmin[dbps]) peak = min / dlmin[dbps];
+    if (max > dlmax[dbps]) peak = max / dlmax[dbps];
+  }
+
   return peak;
 }
 
-double no_src(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,double gain,int chanklen,int twopass,int dither)
+double no_src(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,double gain,int chunklen,int twopass,int dither)
 {
   double peak=0;
   int ch=0,sumread=0;
 
   setstarttime();
 
-  while(sumread < chanklen*nch)
+  while(sumread < chunklen*nch)
     {
       REAL f;
       int s;
@@ -1602,36 +1342,25 @@ double no_src(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,double gain,int chank
 	switch(dbps) {
 	case 1:
 	  f *= 0x7f;
-	  s = dither ? do_shaping(f,&peak,dither,ch) : RINT(f);
+	  s = dither != -1 ? do_shaping(f,&peak,dither,ch) : RINT(f);
 	  buf[0] = s + 128;
 	  fwrite(buf,sizeof(char),1,fpo);
 	  break;
 	case 2:
 	  f *= 0x7fff;
-	  s = dither ? do_shaping(f,&peak,dither,ch) : RINT(f);
+	  s = dither != -1 ? do_shaping(f,&peak,dither,ch) : RINT(f);
 	  buf[0] = s & 255; s >>= 8;
 	  buf[1] = s & 255;
 	  fwrite(buf,sizeof(char),2,fpo);
 	  break;
 	case 3:
 	  f *= 0x7fffff;
-	  s = dither ? do_shaping(f,&peak,dither,ch) : RINT(f);
+	  s = dither != -1 ? do_shaping(f,&peak,dither,ch) : RINT(f);
 	  buf[0] = s & 255; s >>= 8;
 	  buf[1] = s & 255; s >>= 8;
 	  buf[2] = s & 255;
 	  fwrite(buf,sizeof(char),3,fpo);
 	  break;
-#if 0
-	case 4:
-	  f *= 0x7fffffff;
-	  s = dither ? do_shaping(f,&peak,dither,ch) : RINT(f);
-	  buf[0] = s & 255; s >>= 8;
-	  buf[1] = s & 255; s >>= 8;
-	  buf[2] = s & 255; s >>= 8;
-	  buf[3] = s & 255;
-	  fwrite(buf,sizeof(char),4,fpo);
-	  break;
-#endif
 	};
       } else {
 	REAL p = f > 0 ? f : -f;
@@ -1643,10 +1372,25 @@ double no_src(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,double gain,int chank
       if (ch == nch) ch = 0;
       sumread++;
 
-      if ((sumread & 0x3ffff) == 0) showprogress((double)sumread / (chanklen*nch));
+      if ((sumread & 0x3ffff) == 0) showprogress((double)sumread / (chunklen*nch));
     }
 
   showprogress(1);
+
+  if (dither != -1) {
+    static int64_t dlmin[] = { 0, -0x80, -0x8000, -0x800000, -0x80000000ULL };
+    static int64_t dlmax[] = { 0,  0x7f,  0x7fff,  0x7fffff,  0x7fffffffULL };
+    double min = 0, max = 0;
+    int i;
+    for(i=0;i<nch;i++) {
+      double p[2];
+      SSRCDither_getPeaks(shaper[i], p);
+      if (p[1] < min) min = p[1];
+      if (p[0] > max) max = p[0];
+    }
+    if (min < dlmin[dbps]) peak = min / dlmin[dbps];
+    if (max > dlmax[dbps]) peak = max / dlmax[dbps];
+  }
 
   return peak;
 }
@@ -1718,12 +1462,12 @@ int fread_int(FILE *fp)
 {
 #ifndef BIGENDIAN
   int ret;
-  fread(&ret,4,1,fp);
+  ignoreReturnValue(fread(&ret,4,1,fp));
 
   return ret;
 #else
   unsigned char buf[4];
-  fread(&buf,1,4,fp);
+  ignoreReturnValue(fread(&buf,1,4,fp));
   return extract_int(buf);
 #endif
 }
@@ -1732,12 +1476,12 @@ unsigned int fread_uint(FILE *fp)
 {
 #ifndef BIGENDIAN
   unsigned int ret;
-  fread(&ret,4,1,fp);
+  ignoreReturnValue(fread(&ret,4,1,fp));
 
   return ret;
 #else
   unsigned char buf[4];
-  fread(&buf,1,4,fp);
+  ignoreReturnValue(fread(&buf,1,4,fp));
   return extract_uint(buf);
 #endif
 }
@@ -1746,11 +1490,11 @@ int fread_short(FILE *fp)
 {
 #ifndef BIGENDIAN
   short ret;
-  fread(&ret,2,1,fp);
+  ignoreReturnValue(fread(&ret,2,1,fp));
   return ret;
 #else
   unsigned char buf[2];
-  fread(&buf,1,2,fp);
+  ignoreReturnValue(fread(&buf,1,2,fp));
   return extract_short(buf);
 #endif
 }
@@ -1797,7 +1541,7 @@ int main(int argc, char **argv)
   unsigned int length;
   int sfrq,dfrq,dbps;
   double att,peak,noiseamp;
-  int i,j;
+  int i, j, k;
 
   // parse command line options
 
@@ -1806,9 +1550,9 @@ int main(int argc, char **argv)
   dbps = -1;
   twopass = 0;
   normalize = 0;
-  dither = 0;
-  pdf = 0;
-  noiseamp = 0.18;
+  dither = -1;
+  pdf = 1;
+  noiseamp = 1;
 
   for(i=1;i<argc;i++)
     {
@@ -1846,15 +1590,27 @@ int main(int argc, char **argv)
       }
 
       if (strcmp(argv[i],"--dither") == 0) {
+	if (strcmp(argv[i+1], "help") == 0) {
+	  printf("\nAll available noise shaper IDs:\n");
+	  const int *fslist = SSRCDither_getAllSupportedFS();
+	  for(j=0;fslist[j] != -1;j++) {
+	    int ns = SSRCDither_getNumAvailableShapers(fslist[j]);
+	    int *nsids = calloc(ns, sizeof(int));
+	    SSRCDither_getAvailableShaperIDs(nsids, ns, fslist[j]);
+	    for(k=0;k<ns;k++) {
+	      printf("fs = %d, ID = %d : %s\n", fslist[j], nsids[k], SSRCDither_getNameForShaperID(fslist[j], nsids[k]));
+	    }
+	  }
+	  exit(-1);
+	}
 	char *endptr;
 	dither = strtol(argv[i+1],&endptr,10);
 	if (*endptr == '\0') {
-	  if (dither < 0 || dither > 4) {
-	    fprintf(stderr,"unrecognized dither type : %s\n",argv[i+1]);
-	    exit(-1);
-	  }
 	  i++;
-	} else dither = -1;
+	} else {
+	  fprintf(stderr,"Error: Unrecognized dither type %s\n", argv[i+1]);
+	  exit(-1);
+	}
 	continue;
       }
 
@@ -1862,7 +1618,7 @@ int main(int argc, char **argv)
 	char *endptr;
 	pdf = strtol(argv[i+1],&endptr,10);
 	if (*endptr == '\0') {
-	  if (pdf < 0 || pdf > 2) {
+	  if (pdf != 0 && pdf != 1 && pdf != 3) {
 	    fprintf(stderr,"unrecognized p.d.f. type : %s\n",argv[i+1]);
 	    exit(-1);
 	  }
@@ -1876,7 +1632,7 @@ int main(int argc, char **argv)
 	if (*endptr == '\0') {
 	  i++;
 	} else {
-	  static double presets[] = {0.7,0.9,0.18};
+	  static double presets[] = {0.7, 0.9, 0, 0.5};
 	  noiseamp = presets[pdf];
 	}
 
@@ -1893,14 +1649,16 @@ int main(int argc, char **argv)
 	continue;
       }
 
-#ifndef HIGHPREC
       if (strcmp(argv[i],"--profile") == 0) {
-	if (strcmp(argv[i+1],"fast") == 0) {
+	if (strcmp(argv[i+1],"short") == 0) {
 	  AA = 96;
-	  DF = 8000;
-	  FFTFIRLEN = 1024;
-	} else if (strcmp(argv[i+1],"standard") == 0) {
-	  /* nothing to do */
+	  DF = 2000;
+	} else if (strcmp(argv[i+1],"normal") == 0) {
+	  AA = 140;
+	  DF = 2000;
+	} else if (strcmp(argv[i+1],"long") == 0) {
+	  AA = 150;
+	  DF = 200;
 	} else {
 	  fprintf(stderr,"unrecognized profile : %s\n",argv[i+1]);
 	  exit(-1);
@@ -1908,22 +1666,15 @@ int main(int argc, char **argv)
 	i++;
 	continue;
       }
-#else
-      if (strcmp(argv[i],"--profile") == 0) {
-	fprintf(stderr,"Warning : --profile option is ignored.\n");
-	i++;
-	continue;
-      }
-#endif
 
       fprintf(stderr,"unrecognized option : %s\n",argv[i]);
       exit(-1);
     }
 
 #ifndef HIGHPREC
-  if (!quiet) printf("Shibatch sampling rate converter version " VERSION "\n\n");
+  if (!quiet) printf("Shibatch sampling rate converter version " VERSION "(single precision)\n\n");
 #else
-  if (!quiet) printf("Shibatch sampling rate converter version " VERSION "(high precision)\n\n");
+  if (!quiet) printf("Shibatch sampling rate converter version " VERSION "(double precision)\n\n");
 #endif
 
   if (argc-i != 2) {usage(); exit(-1);}
@@ -1985,7 +1736,7 @@ int main(int argc, char **argv)
 	fseek(fpi, length, SEEK_CUR);
       }
     if (feof(fpi)) {
-      fprintf(stderr,"Couldn't find data chank\n");
+      fprintf(stderr,"Couldn't find data chunk\n");
       exit(-1);
     }
   }
@@ -2003,30 +1754,27 @@ int main(int argc, char **argv)
 
   if (dfrq == -1) dfrq = sfrq;
 
-  if (dither == -1) {
-    if (dbps < bps) {
-      if (dbps == 1) dither = 4; else dither = 3;
-    } else {
-      dither = 1;
-    }
+  if (dither != -1 && SSRCDither_getNameForShaperID(dfrq, dither) == NULL) {
+    fprintf(stderr, "Noise shaper %d is not available.\n", dither);
+    dither = -1;
   }
 
+  if (sfrq < dfrq && DF < sfrq / 24.0) DF = sfrq/24.0;
+  if (dfrq < sfrq && DF < dfrq / 24.0) DF = dfrq/24.0;
+
   if (!quiet) {
-    const char *dtype[] = {
-      "none","no noise shaping","triangular spectral shape","ATH based noise shaping","ATH based noise shaping(less amplitude)"
-    };
     const char *ptype[] = {
-      "rectangular","triangular","gaussian"
+      "rectangular", "triangular", "gaussian", "two-level"
     };
     printf("frequency : %d -> %d\n",sfrq,dfrq);
     printf("attenuation : %gdB\n",att);
     printf("bits per sample : %d -> %d\n",bps*8,dbps*8);
     printf("nchannels : %d\n",nch);
     printf("length : %d bytes, %g secs\n",length,(double)length/bps/nch/sfrq);
-    if (dither == 0) {
+    if (dither == -1) {
       printf("dither type : none\n");
     } else {
-      printf("dither type : %s, %s p.d.f, amp = %g\n",dtype[dither],ptype[pdf],noiseamp);
+      printf("dither type : %s, %s p.d.f, amp = %g\n", SSRCDither_getNameForShaperID(dfrq, dither), ptype[pdf], noiseamp);
     }
     printf("\n");
   }
@@ -2085,14 +1833,17 @@ int main(int argc, char **argv)
       }
   }
 
-  if (dither) {
+  if (dither != -1) {
     int min,max;
     if (dbps == 1) {min = -0x80; max = 0x7f;}
     if (dbps == 2) {min = -0x8000; max = 0x7fff;}
     if (dbps == 3) {min = -0x800000; max = 0x7fffff;}
     if (dbps == 4) {min = -0x80000000; max = 0x7fffffff;}
 
-    samp = init_shaper(dfrq,nch,min,max,dither,pdf,noiseamp);
+    for(i=0;i<nch;i++) {
+      shaper[i] = SSRCDither_init(dfrq, min, max, dither, pdf, noiseamp, 0);
+      assert(shaper[i] != NULL);
+    }
   }
 
   if (twopass) {
@@ -2121,7 +1872,7 @@ int main(int argc, char **argv)
 
     if (!quiet) printf("\nPass 2\n");
     
-    if (dither) {
+    if (dither != -1) {
       switch(dbps)
 	{
 	case 1:
@@ -2133,11 +1884,6 @@ int main(int argc, char **argv)
 	case 3:
 	  gain = (normalize || peak >= (0x7fffff-samp)/(double)0x7fffff) ? 1/peak*(0x7fffff-samp) : 1/peak*0x7fffff;
 	  break;
-#if 0
-	case 4:
-	  gain = (normalize || peak >= (0x7fffffff-samp)/(double)0x7fffffff) ? 1/peak*(0x7fffffff-samp) : 1/peak*0x7fffffff;
-	  break;
-#endif
 	}
     } else {
       switch(dbps)
@@ -2151,14 +1897,8 @@ int main(int argc, char **argv)
 	case 3:
 	  gain = 1/peak * 0x7fffff;
 	  break;
-#if 0
-	case 4:
-	  gain = 1/peak * 0x7fffffff;
-	  break;
-#endif
 	}
     }
-    randptr = 0;
 
     setstarttime();
 
@@ -2179,7 +1919,7 @@ int main(int argc, char **argv)
 	case 1:
 	  {
 	    unsigned char buf[1];
-	    s = dither ? do_shaping(f,&peak,dither,ch) : RINT(f);
+	    s = dither != -1 ? do_shaping(f,&peak,dither,ch) : RINT(f);
 
 	    buf[0] = s + 128;
 
@@ -2189,7 +1929,7 @@ int main(int argc, char **argv)
 	case 2:
 	  {
 	    char buf[2];
-	    s = dither ? do_shaping(f,&peak,dither,ch) : RINT(f);
+	    s = dither != -1 ? do_shaping(f,&peak,dither,ch) : RINT(f);
 
 	    buf[0] = s & 255; s >>= 8;
 	    buf[1] = s & 255;
@@ -2200,7 +1940,7 @@ int main(int argc, char **argv)
 	case 3:
 	  {
 	    char buf[3];
-	    s = dither ? do_shaping(f,&peak,dither,ch) : RINT(f);
+	    s = dither != -1 ? do_shaping(f,&peak,dither,ch) : RINT(f);
 
 	    buf[0] = s & 255; s >>= 8;
 	    buf[1] = s & 255; s >>= 8;
@@ -2209,21 +1949,6 @@ int main(int argc, char **argv)
 	    fwrite(buf,sizeof(char),3,fpo);
 	  }
 	  break;
-#if 0
-	case 4:
-	  {
-	    char buf[4];
-	    s = dither ? do_shaping(f,&peak,dither,ch) : RINT(f);
-
-	    buf[0] = s & 255; s >>= 8;
-	    buf[1] = s & 255; s >>= 8;
-	    buf[2] = s & 255; s >>= 8;
-	    buf[3] = s & 255;
-
-	    fwrite(buf,sizeof(char),4,fpo);
-	  }
-	  break;
-#endif
 	}
 
 	ch++;
@@ -2245,8 +1970,8 @@ int main(int argc, char **argv)
     if (!quiet) printf("\n");
   }
 
-  if (dither) {
-    quit_shaper(nch);
+  if (dither != -1) {
+    for(i=0;i<nch;i++) SSRCDither_dispose(shaper[i]);
   }
 
   if (!twopass && peak > 1) {
