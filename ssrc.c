@@ -10,7 +10,7 @@
 
 #include "sleefdft.h"
 
-#define VERSION "1.32"
+#define VERSION "1.33"
 
 #ifndef HIGHPREC
 typedef float REAL;
@@ -170,7 +170,7 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int64_
   int filter2len;
   int *f1order,*f1inc;
   struct SleefDFT *dftf = NULL, *dftb = NULL;
-  unsigned char *rawinbuf,*rawoutbuf;
+  uint8_t *rawinbuf,*rawoutbuf;
   REAL *inbuf,*outbuf;
   REAL **buf1,**buf2;
   double peak=0;
@@ -345,18 +345,18 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int64_
 	  case 1:
 	    for(i = 0; i < nsmplread * nch; i++)
 	      inbuf[nch * inbuflen + i] =
-		(1 / (REAL)0x7f) * ((REAL)((unsigned char *)rawinbuf)[i]-128);
+		(1 / (REAL)0x7f) * ((REAL)((uint8_t *)rawinbuf)[i]-128);
 	    break;
 
 	  case 2:
 #ifndef BIGENDIAN
 	    for(i=0;i<nsmplread*nch;i++)
-	      inbuf[nch*inbuflen+i] = (1/(REAL)0x7fff)*(REAL)((short *)rawinbuf)[i];
+	      inbuf[nch*inbuflen+i] = (1/(REAL)0x7fff)*(REAL)((int16_t *)rawinbuf)[i];
 #else
 	    for(i=0;i<nsmplread*nch;i++) {
 	      inbuf[nch*inbuflen+i] = (1/(REAL)0x7fff)*
 		(((int)rawinbuf[i*2]) |
-		 (((int)((char *)rawinbuf)[i*2+1]) << 8));
+		 (((int)((int8_t *)rawinbuf)[i*2+1]) << 8));
 	    }
 #endif
 	    break;
@@ -366,7 +366,7 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int64_
 	      inbuf[nch*inbuflen+i] = (1/(REAL)0x7fffff)*
 		((((int)rawinbuf[i*3  ]) << 0 ) |
 		 (((int)rawinbuf[i*3+1]) << 8 ) |
-		 (((int)((char *)rawinbuf)[i*3+2]) << 16));
+		 (((int)((int8_t *)rawinbuf)[i*3+2]) << 16));
 	    }
 	    break;
 
@@ -376,7 +376,7 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int64_
 		((((int)rawinbuf[i*4  ]) << 0 ) |
 		 (((int)rawinbuf[i*4+1]) << 8 ) |
 		 (((int)rawinbuf[i*4+2]) << 16) |
-		 (((int)((char *)rawinbuf)[i*4+3]) << 24));
+		 (((int)((int8_t *)rawinbuf)[i*4+3]) << 24));
 	    }
 	    break;
 	  }
@@ -552,7 +552,7 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int64_
 		      }
 		    }
 
-		    ((unsigned char *)rawoutbuf)[i] = s + 0x80;
+		    ((uint8_t *)rawoutbuf)[i] = s + 0x80;
 
 		    ch++;
 		    if (ch == nch) ch = 0;
@@ -587,10 +587,10 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int64_
 		    }
 
 #ifndef BIGENDIAN
-		    ((short *)rawoutbuf)[i] = s;
+		    ((int16_t *)rawoutbuf)[i] = s;
 #else
-		    ((char *)rawoutbuf)[i*2  ] = s & 255; s >>= 8;
-		    ((char *)rawoutbuf)[i*2+1] = s & 255;
+		    ((int8_t *)rawoutbuf)[i*2  ] = s & 255; s >>= 8;
+		    ((int8_t *)rawoutbuf)[i*2+1] = s & 255;
 #endif
 		    ch++;
 		    if (ch == nch) ch = 0;
@@ -624,9 +624,9 @@ double upsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int64_
 		      }
 		    }
 
-		    ((char *)rawoutbuf)[i*3  ] = s & 255; s >>= 8;
-		    ((char *)rawoutbuf)[i*3+1] = s & 255; s >>= 8;
-		    ((char *)rawoutbuf)[i*3+2] = s & 255;
+		    ((int8_t *)rawoutbuf)[i*3  ] = s & 255; s >>= 8;
+		    ((int8_t *)rawoutbuf)[i*3+1] = s & 255; s >>= 8;
+		    ((int8_t *)rawoutbuf)[i*3+2] = s & 255;
 
 		    ch++;
 		    if (ch == nch) ch = 0;
@@ -750,7 +750,7 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int6
   int filter1len;
   int *f2order,*f2inc;
   struct SleefDFT *dftf = NULL, *dftb = NULL;
-  unsigned char *rawinbuf,*rawoutbuf;
+  uint8_t *rawinbuf,*rawoutbuf;
   REAL *inbuf,*outbuf;
   REAL **buf1,**buf2;
   int i,j;
@@ -957,18 +957,18 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int6
 	  case 1:
 	    for(i = 0; i < nsmplread * nch; i++)
 	      inbuf[nch * inbuflen + i] =
-		(1 / (REAL)0x7f) * ((REAL)((unsigned char *)rawinbuf)[i]-128);
+		(1 / (REAL)0x7f) * ((REAL)((uint8_t *)rawinbuf)[i]-128);
 	    break;
 
 	  case 2:
 #ifndef BIGENDIAN
 	    for(i=0;i<nsmplread*nch;i++)
-	      inbuf[nch*inbuflen+i] = (1/(REAL)0x7fff)*(REAL)((short *)rawinbuf)[i];
+	      inbuf[nch*inbuflen+i] = (1/(REAL)0x7fff)*(REAL)((int16_t *)rawinbuf)[i];
 #else
 	    for(i=0;i<nsmplread*nch;i++) {
 	      inbuf[nch*inbuflen+i] = (1/(REAL)0x7fff)*
 		(((int)rawinbuf[i*2]) |
-		 (((int)((char *)rawinbuf)[i*2+1]) << 8));
+		 (((int)((int8_t *)rawinbuf)[i*2+1]) << 8));
 	    }
 #endif
 	    break;
@@ -978,7 +978,7 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int6
 	      inbuf[nch*inbuflen+i] = (1/(REAL)0x7fffff)*
 		((((int)rawinbuf[i*3  ]) << 0 ) |
 		 (((int)rawinbuf[i*3+1]) << 8 ) |
-		 (((int)((char *)rawinbuf)[i*3+2]) << 16));
+		 (((int)((int8_t *)rawinbuf)[i*3+2]) << 16));
 	    }
 	    break;
 
@@ -988,7 +988,7 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int6
 		((((int)rawinbuf[i*4  ]) << 0 ) |
 		 (((int)rawinbuf[i*4+1]) << 8 ) |
 		 (((int)rawinbuf[i*4+2]) << 16) |
-		 (((int)((char *)rawinbuf)[i*4+3]) << 24));
+		 (((int)((int8_t *)rawinbuf)[i*4+3]) << 24));
 	    }
 	    break;
 	  }
@@ -1119,7 +1119,7 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int6
 		      }
 		    }
 
-		    ((unsigned char *)rawoutbuf)[i] = s + 0x80;
+		    ((uint8_t *)rawoutbuf)[i] = s + 0x80;
 
 		    ch++;
 		    if (ch == nch) ch = 0;
@@ -1154,10 +1154,10 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int6
 		    }
 
 #ifndef BIGENDIAN
-		    ((short *)rawoutbuf)[i] = s;
+		    ((int16_t *)rawoutbuf)[i] = s;
 #else
-		    ((char *)rawoutbuf)[i*2  ] = s & 255; s >>= 8;
-		    ((char *)rawoutbuf)[i*2+1] = s & 255;
+		    ((int8_t *)rawoutbuf)[i*2  ] = s & 255; s >>= 8;
+		    ((int8_t *)rawoutbuf)[i*2+1] = s & 255;
 #endif
 
 		    ch++;
@@ -1192,9 +1192,9 @@ double downsample(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int6
 		      }
 		    }
 
-		    ((char *)rawoutbuf)[i*3  ] = s & 255; s >>= 8;
-		    ((char *)rawoutbuf)[i*3+1] = s & 255; s >>= 8;
-		    ((char *)rawoutbuf)[i*3+2] = s & 255;
+		    ((int8_t *)rawoutbuf)[i*3  ] = s & 255; s >>= 8;
+		    ((int8_t *)rawoutbuf)[i*3+1] = s & 255; s >>= 8;
+		    ((int8_t *)rawoutbuf)[i*3+2] = s & 255;
 
 		    ch++;
 		    if (ch == nch) ch = 0;
@@ -1303,19 +1303,19 @@ double no_src(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,double gain,int chunk
     {
       REAL f;
       int s;
-      unsigned char buf[4];
+      uint8_t buf[4];
 
       switch(bps) {
       case 1:
 	ignoreReturnValue(fread(buf,1,1,fpi));
-	f = (1 / (REAL)0x7f) * ((REAL)((unsigned char *)buf)[0]-128);
+	f = (1 / (REAL)0x7f) * ((REAL)((uint8_t *)buf)[0]-128);
 	break;
       case 2:
 	ignoreReturnValue(fread(buf,2,1,fpi));
 #if 0
-	f = (1 / (REAL)0x7fff) * ((REAL)(((short *)buf)[0]);
+	f = (1 / (REAL)0x7fff) * ((REAL)(((int16_t *)buf)[0]);
 #else
-	f = (1 / (REAL)0x7fff) * (((int)buf[0]) | (((int)(((char *)buf)[1])) << 8));
+	f = (1 / (REAL)0x7fff) * (((int)buf[0]) | (((int)(((int8_t *)buf)[1])) << 8));
 #endif
 	break;
       case 3:
@@ -1323,7 +1323,7 @@ double no_src(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,double gain,int chunk
 	f = (1 / (REAL)0x7fffff) * 
 	  ((((int)buf[0]) << 0 ) |
 	   (((int)buf[1]) << 8 ) |
-	   (((int)((char *)buf)[2]) << 16));
+	   (((int)((int8_t *)buf)[2]) << 16));
 	break;
       case 4:
 	ignoreReturnValue(fread(buf,4,1,fpi));
@@ -1331,7 +1331,7 @@ double no_src(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,double gain,int chunk
 	  ((((int)buf[0]) << 0 ) |
 	   (((int)buf[1]) << 8 ) |
 	   (((int)buf[2]) << 16) |
-	   (((int)((char *)buf)[3]) << 24));
+	   (((int)((int8_t *)buf)[3]) << 24));
 	break;
       };
 
@@ -1344,14 +1344,14 @@ double no_src(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,double gain,int chunk
 	  f *= 0x7f;
 	  s = dither != -1 ? do_shaping(f,&peak,dither,ch) : RINT(f);
 	  buf[0] = s + 128;
-	  fwrite(buf,sizeof(char),1,fpo);
+	  fwrite(buf,sizeof(int8_t),1,fpo);
 	  break;
 	case 2:
 	  f *= 0x7fff;
 	  s = dither != -1 ? do_shaping(f,&peak,dither,ch) : RINT(f);
 	  buf[0] = s & 255; s >>= 8;
 	  buf[1] = s & 255;
-	  fwrite(buf,sizeof(char),2,fpo);
+	  fwrite(buf,sizeof(int8_t),2,fpo);
 	  break;
 	case 3:
 	  f *= 0x7fffff;
@@ -1359,7 +1359,7 @@ double no_src(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,double gain,int chunk
 	  buf[0] = s & 255; s >>= 8;
 	  buf[1] = s & 255; s >>= 8;
 	  buf[2] = s & 255;
-	  fwrite(buf,sizeof(char),3,fpo);
+	  fwrite(buf,sizeof(int8_t),3,fpo);
 	  break;
 	};
       } else {
@@ -1395,36 +1395,36 @@ double no_src(FILE *fpi,FILE *fpo,int nch,int bps,int dbps,double gain,int chunk
   return peak;
 }
 
-int extract_int(unsigned char *buf)
+int extract_int(uint8_t *buf)
 {
 #ifndef BIGENDIAN
   return *(int *)buf;
 #else
   return ((int)buf[0]) | (((int)buf[1]) << 8) | 
-    (((int)buf[2]) << 16) | (((int)((char *)buf)[3]) << 24);
+    (((int)buf[2]) << 16) | (((int)((int8_t *)buf)[3]) << 24);
 #endif
 }
 
-unsigned int extract_uint(unsigned char *buf)
+unsigned int extract_uint(uint8_t *buf)
 {
 #ifndef BIGENDIAN
   return *(int *)buf;
 #else
   return ((unsigned int)buf[0]) | (((unsigned int)buf[1]) << 8) | 
-    (((unsigned int)buf[2]) << 16) | (((unsigned int)((char *)buf)[3]) << 24);
+    (((unsigned int)buf[2]) << 16) | (((unsigned int)((int8_t *)buf)[3]) << 24);
 #endif
 }
 
-short extract_short(unsigned char *buf)
+int16_t extract_short(uint8_t *buf)
 {
 #ifndef BIGENDIAN
-  return *(short *)buf;
+  return *(int16_t *)buf;
 #else
-  return ((short)buf[0]) | (((short)((char *)buf)[1]) << 8);
+  return ((int16_t)buf[0]) | (((int16_t)((int8_t *)buf)[1]) << 8);
 #endif
 }
 
-void bury_int(unsigned char *buf,int i)
+void bury_int(uint8_t *buf,int i)
 {
 #ifndef BIGENDIAN
   *(int *)buf = i;
@@ -1436,7 +1436,7 @@ void bury_int(unsigned char *buf,int i)
 #endif
 }
 
-void bury_uint(unsigned char *buf,unsigned int i)
+void bury_uint(uint8_t *buf,unsigned int i)
 {
 #ifndef BIGENDIAN
   *(int *)buf = i;
@@ -1448,10 +1448,10 @@ void bury_uint(unsigned char *buf,unsigned int i)
 #endif
 }
 
-void bury_short(unsigned char *buf,short s)
+void bury_short(uint8_t *buf,int16_t s)
 {
 #ifndef BIGENDIAN
-  *(short *)buf = s;
+  *(int16_t *)buf = s;
 #else
   buf[0] = s & 0xff; s >>= 8;
   buf[1] = s & 0xff;
@@ -1466,7 +1466,7 @@ int fread_int(FILE *fp)
 
   return ret;
 #else
-  unsigned char buf[4];
+  uint8_t buf[4];
   ignoreReturnValue(fread(&buf,1,4,fp));
   return extract_int(buf);
 #endif
@@ -1480,7 +1480,7 @@ unsigned int fread_uint(FILE *fp)
 
   return ret;
 #else
-  unsigned char buf[4];
+  uint8_t buf[4];
   ignoreReturnValue(fread(&buf,1,4,fp));
   return extract_uint(buf);
 #endif
@@ -1489,11 +1489,11 @@ unsigned int fread_uint(FILE *fp)
 int fread_short(FILE *fp)
 {
 #ifndef BIGENDIAN
-  short ret;
+  int16_t ret;
   ignoreReturnValue(fread(&ret,2,1,fp));
   return ret;
 #else
-  unsigned char buf[2];
+  uint8_t buf[2];
   ignoreReturnValue(fread(&buf,1,2,fp));
   return extract_short(buf);
 #endif
@@ -1504,7 +1504,7 @@ void fwrite_int(FILE *fp,int i)
 #ifndef BIGENDIAN
   fwrite(&i,4,1,fp);
 #else
-  unsigned char buf[4];
+  uint8_t buf[4];
   bury_int(buf,i);
   fwrite(&buf,1,4,fp);
 #endif
@@ -1515,7 +1515,7 @@ void fwrite_uint(FILE *fp, uint32_t i)
 #ifndef BIGENDIAN
   fwrite(&i,4,1,fp);
 #else
-  unsigned char buf[4];
+  uint8_t buf[4];
   bury_uint(buf,i);
   fwrite(&buf,1,4,fp);
 #endif
@@ -1526,7 +1526,7 @@ void fwrite_short(FILE *fp, int16_t s)
 #ifndef BIGENDIAN
   fwrite(&s,2,1,fp);
 #else
-  unsigned char buf[4];
+  uint8_t buf[4];
   bury_int(buf,s);
   fwrite(&buf,1,2,fp);
 #endif
@@ -1689,8 +1689,8 @@ int main(int argc, char **argv)
   /* read wav header */
 
   {
-    unsigned char ibuf[576*2*2];
-    short word;
+    uint8_t ibuf[576*2*2];
+    int16_t word;
     int dword;
 
     if (getc(fpi) != 'R') fmterr(1);
@@ -1725,7 +1725,7 @@ int main(int argc, char **argv)
 
     for(;;)
       {
-	char buf[4];
+	int8_t buf[4];
 	buf[0] = getc(fpi);
 	buf[1] = getc(fpi);
 	buf[2] = getc(fpi);
@@ -1795,7 +1795,7 @@ int main(int argc, char **argv)
   /* generate wav header */
 
   {
-    short word;
+    int16_t word;
     int dword;
 
     fwrite("RIFF",4,1,fpo);
@@ -1918,35 +1918,35 @@ int main(int argc, char **argv)
 	switch(dbps) {
 	case 1:
 	  {
-	    unsigned char buf[1];
+	    uint8_t buf[1];
 	    s = dither != -1 ? do_shaping(f,&peak,dither,ch) : RINT(f);
 
 	    buf[0] = s + 128;
 
-	    fwrite(buf,sizeof(char),1,fpo);
+	    fwrite(buf,sizeof(int8_t),1,fpo);
 	  }
 	  break;
 	case 2:
 	  {
-	    char buf[2];
+	    int8_t buf[2];
 	    s = dither != -1 ? do_shaping(f,&peak,dither,ch) : RINT(f);
 
 	    buf[0] = s & 255; s >>= 8;
 	    buf[1] = s & 255;
 
-	    fwrite(buf,sizeof(char),2,fpo);
+	    fwrite(buf,sizeof(int8_t),2,fpo);
 	  }
 	  break;
 	case 3:
 	  {
-	    char buf[3];
+	    int8_t buf[3];
 	    s = dither != -1 ? do_shaping(f,&peak,dither,ch) : RINT(f);
 
 	    buf[0] = s & 255; s >>= 8;
 	    buf[1] = s & 255; s >>= 8;
 	    buf[2] = s & 255;
 
-	    fwrite(buf,sizeof(char),3,fpo);
+	    fwrite(buf,sizeof(int8_t),3,fpo);
 	  }
 	  break;
 	}
@@ -1979,7 +1979,7 @@ int main(int argc, char **argv)
   }
 
   {
-    short word;
+    int16_t word;
     int dword;
     int len;
 

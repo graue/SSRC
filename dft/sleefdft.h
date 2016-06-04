@@ -1,6 +1,7 @@
 #ifndef __SLEEFDFT_H__
 #define __SLEEFDFT_H__
 
+#include <stdlib.h>
 #include <stdint.h>
 
 #define SLEEF_MODE_FORWARD     (0 <<  0)

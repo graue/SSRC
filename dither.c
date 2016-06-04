@@ -193,7 +193,7 @@ void SSRCDither_quantizeDouble(SSRCDither *thiz, int32_t *out, double *in, int32
     }
 
     out[p] = (int)q;
-
+    
     //
 
     if (randPtr == RANDBUFLEN) {

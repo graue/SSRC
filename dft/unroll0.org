@@ -5288,6 +5288,8 @@ void tbut64b_%ISA%(real *out0, uint32_t *q, const real *in0, const int inShift, 
 }
 #endif
 
+#include <stdio.h>
+
 void realSub0_%ISA%(real *d, const real *s, const int log2len, const real *rtCoef0, const real *rtCoef1) {
   const int n = 1 << log2len;
   real s0 = s[0], s1 = s[1];
@@ -5306,7 +5308,7 @@ void realSub0_%ISA%(real *d, const real *s, const int log2len, const real *rtCoe
     real2 t = minusplus(v, u);
     real2 m = minusplus(reverse(times(t, loadu(rtCoef1, k))),
 			times(t, loadu(rtCoef0, k)));
-
+    
     storeu(d, idx0, minusplus(v, uminus(m)));
     store (d, idx1, reverse2(minus(u, m)));
   }
@@ -5316,10 +5318,10 @@ void realSub0_%ISA%(real *d, const real *s, const int log2len, const real *rtCoe
     real ti = s[k*2+1] + s[(n-k)*2+1];
     real ur = rtCoef0[k*2+0];
     real ui = rtCoef1[k*2+0];
-
+    
     real mr = + ti * ui - tr * ur;
     real mi = + tr * ui + ti * ur;
-
+ 
     d[k*2+0] = s[k*2+0] + mr;
     d[k*2+1] = s[k*2+1] - mi;
 

@@ -1,6 +1,6 @@
 1.33
   Added support for ARM NEON instruction sets.
-  Added support for compilation on Mac OSX.
+  Added support for compilation on Max OSX.
 
 1.32
   Added new noise shaper coefficients.

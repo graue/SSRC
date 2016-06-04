@@ -2,14 +2,11 @@ ifeq ($(CC),cc)
 CC=gcc
 endif
 
-CFLAGS=-std=c99 -g -Wall -Wno-attributes -Wno-unused-function -Wno-unused-variable
-OPT=-O3
-OPTSSE3=-O3 -msse -msse2 -msse3 -DSSE3_DOUBLE
-OPTAVX=-O3 -msse -msse2 -msse3 -mavx -DAVX_DOUBLE
-
 UNROLLMAX=-1
 UNROLLMAX2=-1
 MAXBUTWIDTH=5
+
+CFLAGS2 := $(CFLAGS) -std=c99 -I../common/ -DMAXBUTWIDTH=$(MAXBUTWIDTH)
 
 # Detect number of processors
 
@@ -21,7 +18,7 @@ ifeq ($(NUMBER_OF_PROCESSORS),)
 ifeq ($(OS),Linux)
   NPROCS := $(shell grep -c ^processor /proc/cpuinfo)
 else ifeq ($(OS),Darwin)
-  NPROCS := $(shell system_profiler | awk '/Number of CPUs/ {print $$4}{next;}')
+  NPROCS := 2
 endif # $(OS)
 else
   NPROCS := $(NUMBER_OF_PROCESSORS)
@@ -48,31 +45,40 @@ ifeq "$(GCCARCH)" "x86_64"
 	ISALIST=purecdp sse3dp avxdp
 endif
 
+ifeq "$(GCCARCH)" "aarch64"
+	ISALIST=purecdp neondp
+endif
+
+ifeq "$(OS)" "Darwin"
+	ISALIST=purecdp sse3dp
+endif
+
 #
 
 all : dft.a
 
 clean :
 	rm -f *.o *.s *~ *.exe
+	rm -rf *.dSYM
 	rm -f a.out mkunroll mkdispatch dispatch.h dft.a dftsp.a naivetest
 	rm -f unroll0_*.c unroll1_*.c unroll2_*.c unroll0s_*.c unroll1s_*.c unroll2s_*.c 
 
 naivetest : naivetest.c dft.a
-	$(CC) $(CFLAGS) naivetest.c -o naivetest dft.a -lm 
+	$(CC) $(CFLAGS2) -std=c99 naivetest.c -o naivetest dft.a -lm 
 
 dft.a : mkunroll dft.o
 	./mkunroll $(UNROLLMAX) $(UNROLLMAX2) $(ISALIST)
-	"$(MAKE)" -j $(NPROCS) -f Makefile.unroll CC=$(CC) MAXBUTWIDTH=$(MAXBUTWIDTH) UNROLLMAX=$(UNROLLMAX) UNROLLMAX2=$(UNROLLMAX2) OBJ="`echo unroll*.c | sed -e 's/\.c/\.o/g'`"
+	"$(MAKE)" -j $(NPROCS) -f Makefile.unroll CC=$(CC) CFLAGS="$(CFLAGS2)" MAXBUTWIDTH=$(MAXBUTWIDTH) UNROLLMAX=$(UNROLLMAX) UNROLLMAX2=$(UNROLLMAX2) OBJ="`echo unroll*.c | sed -e 's/\.c/\.o/g'`"
 	ar rcs dft.a `echo unroll*.o` dft.o
 
 dft.o : dft.c dispatch.h
-	$(CC) $(CFLAGS) $(OPT) dft.c -c -o dft.o
+	$(CC) $(CFLAGS2) -std=c99 dft.c -c -o dft.o
 
 mkdispatch : mkdispatch.c
-	$(CC) $(CFLAGS) mkdispatch.c -o mkdispatch
+	$(CC) $(CFLAGS2) -std=c99 mkdispatch.c -o mkdispatch
 
 mkunroll : mkunroll.c
-	$(CC) $(CFLAGS) mkunroll.c -o mkunroll
+	$(CC) $(CFLAGS2) -std=c99 mkunroll.c -o mkunroll
 
 dispatch.h : mkdispatch
 	./mkdispatch $(UNROLLMAX) $(UNROLLMAX2) $(MAXBUTWIDTH) $(ISALIST) > dispatch.h

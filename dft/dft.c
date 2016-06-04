@@ -7,14 +7,19 @@
 #include <math.h>
 #include <assert.h>
 
-#include <malloc.h>
 #include <time.h>
 #include <unistd.h>
+#include <signal.h>
+#include <setjmp.h>
 
 #if defined(__MINGW32__) || defined(__MINGW64__)
 #include <windows.h>
 #include <sys/types.h>
 #include <sys/timeb.h>
+#elif defined(__APPLE__)
+#include <sys/time.h>
+#else
+#include <malloc.h>
 #endif
 
 #ifndef M_PI
@@ -57,6 +62,9 @@ SleefDFT_real ctbl[] = {
 #if defined(__MINGW32__) || defined(__MINGW64__)
 void *SleefDFT_malloc(size_t z) { return _aligned_malloc(z, 4096); }
 void SleefDFT_free(void *ptr) { _aligned_free(ptr); }
+#elif defined(__APPLE__)
+void *SleefDFT_malloc(size_t z) { return malloc(z); }
+void SleefDFT_free(void *ptr) { free(ptr); }
 #else
 void *SleefDFT_malloc(size_t z) { return memalign(4096, z); }
 void SleefDFT_free(void *ptr) { free(ptr); }
@@ -360,6 +368,12 @@ static uint64_t gettime() {
   _ftime64(&t);
   return t.time * 1000LL + t.millitm;
 }
+#elif defined(__APPLE__)
+static uint64_t gettime() {
+  struct timeval time;
+  gettimeofday(&time, NULL);
+  return (uint64_t)((time.tv_sec * 1000) + (time.tv_usec / 1000));
+}
 #else
 static uint64_t gettime() {
   struct timespec tp;
@@ -529,7 +543,26 @@ static int measure(SleefDFT *p, int randomize) {
   p->pathLen = 0;
   for(int j = p->log2len;j >= 0;j--) if (p->bestPath[j] != 0) p->pathLen++;
 
+  //for(int j = p->log2len;j >= 0;j--) if (p->bestPath[j] != 0) printf("%d ", p->bestPath[j]);
+  //printf("\n");
+
   return 1;
+}
+
+static jmp_buf sigjmp;
+static void sighandler(int signum) { longjmp(sigjmp, 1); }
+
+static int checkISAAvailability(int isa) {
+  signal(SIGILL, sighandler);
+
+  if (setjmp(sigjmp) == 0) {
+    int ret = getInt[isa] != NULL && (*getInt[isa])(0);
+    signal(SIGILL, SIG_DFL);
+    return ret;
+  }
+
+  signal(SIGILL, SIG_DFL);
+  return 0;
 }
 
 SleefDFT *SleefDFT_init(uint64_t mode, uint32_t n) {
@@ -545,14 +578,14 @@ SleefDFT *SleefDFT_init(uint64_t mode, uint32_t n) {
   if (p->isa == 0) {
     int bestPriority = -1;
     for(int i=0;i<ISAMAX;i++) {
-      if ((*getInt[i])(0) && bestPriority < (*getInt[i])(2)) {
+      if (checkISAAvailability(i) && bestPriority < (*getInt[i])(2)) {
 	bestPriority = (*getInt[i])(2);
 	p->isa = i;
       }
     }
   } else {
     p->isa--;
-    if (getInt[p->isa] == NULL || !(*getInt[p->isa])(0)) {
+    if (checkISAAvailability(p->isa)) {
       if ((p->mode & SLEEF_MODE_VERBOSE) != 0) printf("Specified ISA not available\n");
       p->magic = 0;
       free(p);

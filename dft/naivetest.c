@@ -68,7 +68,7 @@ int check_cf(int n) {
 
   forward(ts, fs, n);
 
-  struct SleefDFT *p = SleefDFT_init(SLEEF_MODE_DEBUG, n);
+  struct SleefDFT *p = SleefDFT_init(SLEEF_MODE_DEBUG | SLEEF_MODE_VERBOSE, n);
 
   SleefDFT_execute(p, sy, sx);
 
@@ -82,7 +82,10 @@ int check_cf(int n) {
 	(fabs(sy[(i*2+1)] - cimag(fs[i])) > THRES)) {
       success = 0;
     }
-
+    
+    //printf("%g, %g\n", sy[(2*i+0)], creal(fs[i]));
+    //printf("%g, %g\n", sy[(2*i+1)], cimag(fs[i]));
+    
     maxError = max(maxError, fabs((sy[(i*2+0)] - creal(fs[i]))));
     maxError = max(maxError, fabs((sy[(i*2+1)] - cimag(fs[i]))));
   }

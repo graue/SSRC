@@ -1,7 +1,14 @@
 #ifndef __SIMD_H__
 #define __SIMD_H__
 
+#if defined(__x86_64__) || defined(__i386__)
 #include <x86intrin.h>
+#endif
+
+#if (defined(__arm__) || defined(__aarch64__)) && defined(__ARM_NEON__)
+#include <arm_neon.h>
+#endif
+
 #include <stdint.h>
 
 #include "sleefdft.h"
@@ -169,7 +176,7 @@ static INLINE real2 uminus(real2 d0) { return vneg_vf_vf(d0); }
 static INLINE real2 times(real2 d0, real2 d1) { return vmul_vf_vf_vf(d0, d1); }
 static INLINE real2 ctimes(real2 d0, real d) { return vmul_vf_vf_vf(d0, vcast_vf_f(d)); }
 
-static INLINE void scatter(real *ptr, int offset, const int step, real2 v) {
+static INLINE void scatter(real *ptr, int offset, const int step, real2 v) { // !!
   _mm_storel_pd((double *)(ptr+(offset + step * 0)*2), (__m128d)v);
   _mm_storeh_pd((double *)(ptr+(offset + step * 1)*2), (__m128d)v);
 }
@@ -278,6 +285,64 @@ static INLINE void scstream(real *ptr, int offset, const int step, real2 v) {
   _mm_storel_pd((double *)(ptr+(offset + step * 2)*2), (__m128d)_mm256_extractf128_ps(v, 1));
   _mm_storeh_pd((double *)(ptr+(offset + step * 3)*2), (__m128d)_mm256_extractf128_ps(v, 1));
 }
+#elif defined(NEON_FLOAT)
+typedef float real;
+
+#define VECWIDTH 2
+#define LOG2VECWIDTH 1
+#define PRIORITY 1
+#define ISANAME "ARM NEON float"
+
+#include "neon.h"
+
+typedef vfloat real2;
+
+static int available() {
+  static real2 detectionTmp;
+  detectionTmp = vadd_vf_vf_vf(detectionTmp, detectionTmp);
+  return 1;
+}
+
+static INLINE real2 uplusminus(real2 d0) {
+  static const float32_t c[] = { +0.0f, -0.0f, +0.0f, -0.0f };
+  return (vfloat)vxor_vm_vm_vm((vmask)vload_vf_p(c), (vmask)d0);
+}
+
+static INLINE real2 uminusplus(real2 d0) {
+  static const float32_t c[] = { -0.0f, +0.0f, -0.0f, +0.0f };
+  return (vfloat)vxor_vm_vm_vm((vmask)vload_vf_p(c), (vmask)d0);
+}
+
+static INLINE real2 minusplus(real2 d0, real2 d1) { return vadd_vf_vf_vf(d0, uminusplus(d1)); }
+static INLINE real2 reverse(real2 d0)  { return vrev64q_f32(d0); }
+static INLINE real2 reverse2(real2 d0) { return vcombine_f32(vget_high_f32(d0), vget_low_f32(d0)); }
+
+static INLINE real2 load (const real *ptr, int offset) { return vload_vf_p(&ptr[2*offset]); }
+static INLINE real2 loadu(const real *ptr, int offset) { return vloadu_vf_p(&ptr[2*offset]); }
+static INLINE void store (real *ptr, int offset, real2 v) { vstore_p_vf(&ptr[2*offset], v); }
+static INLINE void storeu(real *ptr, int offset, real2 v) { vstoreu_p_vf(&ptr[2*offset], v); }
+static INLINE void prefetch(real *ptr, int offset) { }
+static INLINE real2 loadc(real c) { return vcast_vf_f(c); }
+
+static INLINE void stream(real *ptr, int offset, real2 v) { vstore_p_vf(&ptr[2*offset], v); }
+
+static INLINE real2 plus(real2 d0, real2 d1) { return vadd_vf_vf_vf(d0, d1); }
+static INLINE real2 minus(real2 d0, real2 d1) { return vsub_vf_vf_vf(d0, d1); }
+
+static INLINE real2 uminus(real2 d0) { return vneg_vf_vf(d0); }
+
+static INLINE real2 times(real2 d0, real2 d1) { return vmul_vf_vf_vf(d0, d1); }
+static INLINE real2 ctimes(real2 d0, real d) { return vmul_vf_vf_vf(d0, vcast_vf_f(d)); }
+
+static INLINE void scatter(real *ptr, int offset, const int step, real2 v) {
+  vst1_f32((float *)(ptr+(offset + step * 0)*2), vget_low_f32(v));
+  vst1_f32((float *)(ptr+(offset + step * 1)*2), vget_high_f32(v));
+}
+
+static INLINE void scstream(real *ptr, int offset, const int step, real2 v) {
+  vst1_f32((float *)(ptr+(offset + step * 0)*2), vget_low_f32(v));
+  vst1_f32((float *)(ptr+(offset + step * 1)*2), vget_high_f32(v));
+}
 #elif defined(NEON_DOUBLE)
 typedef double real;
 
@@ -286,9 +351,50 @@ typedef double real;
 #define PRIORITY 1
 #define ISANAME "ARM NEON double"
 
-#error Not done yet
+#include "neon.h"
 
+typedef vdouble real2;
 
+static int available() { return 1; }
+
+static INLINE real2 uplusminus(real2 d0) {
+  static const double c[] = { +0.0, -0.0 };
+  return (vdouble)vxor_vm_vm_vm((vmask)vload_vd_p(c), (vmask)d0);
+}
+
+static INLINE real2 uminusplus(real2 d0) {
+  static const double c[] = { -0.0, +0.0 };
+  return (vdouble)vxor_vm_vm_vm((vmask)vload_vd_p(c), (vmask)d0);
+}
+
+static INLINE real2 minusplus(real2 d0, real2 d1) { return vadd_vd_vd_vd(d0, uminusplus(d1)); }
+static INLINE real2 reverse(real2 d0)  { return vcombine_f64(vget_high_f64(d0), vget_low_f64(d0)); }
+static INLINE real2 reverse2(real2 d0) { return d0; }
+
+static INLINE real2 load (const real *ptr, int offset) { return vload_vd_p(&ptr[2*offset]); }
+static INLINE real2 loadu(const real *ptr, int offset) { return vloadu_vd_p(&ptr[2*offset]); }
+static INLINE void store (real *ptr, int offset, real2 v) { vstore_p_vd(&ptr[2*offset], v); }
+static INLINE void storeu(real *ptr, int offset, real2 v) { vstoreu_p_vd(&ptr[2*offset], v); }
+static INLINE void prefetch(real *ptr, int offset) { }
+static INLINE real2 loadc(real c) { return vcast_vd_d(c); }
+
+static INLINE void stream(real *ptr, int offset, real2 v) { vstore_p_vd(&ptr[2*offset], v); }
+
+static INLINE real2 plus(real2 d0, real2 d1) { return vadd_vd_vd_vd(d0, d1); }
+static INLINE real2 minus(real2 d0, real2 d1) { return vsub_vd_vd_vd(d0, d1); }
+
+static INLINE real2 uminus(real2 d0) { return vneg_vd_vd(d0); }
+
+static INLINE real2 times(real2 d0, real2 d1) { return vmul_vd_vd_vd(d0, d1); }
+static INLINE real2 ctimes(real2 d0, real d) { return vmul_vd_vd_vd(d0, vcast_vd_d(d)); }
+
+static INLINE void scatter(real *ptr, int offset, const int step, real2 v) {
+  vstore_p_vd((real *)(&ptr[2*offset]), v);
+}
+
+static INLINE void scstream(real *ptr, int offset, const int step, real2 v) {
+  vstore_p_vd((real *)(&ptr[2*offset]), v);
+}
 #else
 #error No ISA specified
 #endif
